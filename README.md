@@ -13,13 +13,13 @@
 
 ### 安装
 
-正式发布后，在 DSH 的「设置 → 插件 → 添加插件」粘贴 GitHub Release 的 `.tgz` 下载地址：
+在 DeepSeek Harness 中打开「设置 → 插件 → 添加插件」，粘贴以下安装包地址：
 
 ```text
 https://github.com/msxqqq/dsh-unreal/releases/download/v0.1.0/dsh-unreal-0.1.0.tgz
 ```
 
-此地址需在 Release `v0.1.0` 上传安装包后才可用。也可以下载 `.tgz` 后选择本地文件，或克隆源码后选择包含 `package.json` 的本地目录。不要把 GitHub 仓库网页或自动生成的 Source code 压缩包当成安装包。
+也可从 [GitHub Release](https://github.com/msxqqq/dsh-unreal/releases/tag/v0.1.0) 下载安装包，然后在「添加插件」中选择本地 `.tgz` 文件。
 
 ### 使用
 

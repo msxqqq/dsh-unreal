@@ -13,13 +13,13 @@ Connect to, open, or create Unreal projects from DeepSeek Harness on Windows. Th
 
 ### Install
 
-Once published, paste this GitHub Release `.tgz` URL into **Settings → Plugins → Add plugin** in DSH:
+In DeepSeek Harness, open **Settings → Plugins → Add plugin** and paste the installation package URL:
 
 ```text
 https://github.com/msxqqq/dsh-unreal/releases/download/v0.1.0/dsh-unreal-0.1.0.tgz
 ```
 
-The URL works after the package is uploaded to Release `v0.1.0`. Alternatively, select a downloaded `.tgz`, or clone the source and select the local folder containing `package.json`. The GitHub repository page and the auto-generated Source code archives are not install packages.
+Alternatively, download the `.tgz` package from the [GitHub Release](https://github.com/msxqqq/dsh-unreal/releases/tag/v0.1.0) and select it under **Add plugin**.
 
 ### Use
 
