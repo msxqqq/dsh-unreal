@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { win32 as path } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UnrealMcp } from './mcp.js';
+import { UnrealMcp, validMcpPath } from './mcp.js';
 import { fromHost } from './runtime.js';
 import { newProjectPath, suggestProjectName, validDirectory, validProjectName } from './project-paths.js';
 
@@ -17,7 +17,7 @@ const projectPath = value => typeof value === 'string' && value.length <= 2048 &
   /\.uproject$/i.test(value) && validDirectory(value);
 const pid = value => Number.isInteger(value) && value > 0 && value <= 0x7fffffff;
 const fields = {
-  discover: [], status: [], disconnect: [], connect: ['path', 'pid'],
+  discover: [], status: [], disconnect: [], connect: ['path', 'pid', 'endpointPath'],
   create: ['directory', 'name', 'engineId'], open: ['path', 'engineId'], browse: ['mode', 'path'],
 };
 const waitLimit = 4 * 60 * 1000;
@@ -33,6 +33,7 @@ function validate(input) {
   }
   if ((input.action === 'connect' || input.action === 'open') && !projectPath(input.path)) throw new Error('Enter an absolute local .uproject path.');
   if (input.action === 'connect' && !pid(input.pid)) throw new Error('Select a detected Unreal Editor process.');
+  if (input.endpointPath !== undefined && !validMcpPath(input.endpointPath)) throw new Error('Enter an MCP path on the local editor, not a full URL.');
   if (input.action === 'create' && !validProjectName(input.name)) throw new Error('Use 1–20 letters, digits, or underscores, starting with a letter. Reserved platform names are not accepted.');
   if (input.action === 'create' && input.directory !== undefined && !validDirectory(input.directory)) throw new Error('Enter an absolute local folder path.');
   if (input.action === 'browse' && (!['project', 'directory'].includes(input.mode) || (input.path !== undefined && !(input.mode === 'project' ? projectPath(input.path) : validDirectory(input.path))))) throw new Error('Invalid Unreal project picker request.');
@@ -95,6 +96,7 @@ class UnrealProjects extends TypertRemoteService {
     const pending = state.pending;
     return { ok: true, binding: state.binding, pending: pending ? {
       path: pending.path, pid: pending.pid, name: pending.name, port: pending.port ?? null,
+      ...(pending.endpointPath ? { endpointPath: pending.endpointPath } : {}),
       status: pending.status, ...(pending.error ? { error: pending.error } : {}),
     } : null };
   }
@@ -165,9 +167,10 @@ class UnrealProjects extends TypertRemoteService {
       this.reset(state);
       const project = result.project;
       state.pending = { path: project.path, pid: project.pid, name: project.name, port: result.port,
+        ...(input.endpointPath ? { endpointPath: input.endpointPath } : {}),
         candidates: [...new Set([result.port, ...(project.ports ?? [])].filter(validPort))].slice(0, 12),
         status: result.status === 'ready' ? 'starting' : result.status, error: result.error,
-        canSuggestManual: result.status === 'ready', expires: Date.now() + waitLimit };
+        canSuggestManual: result.status === 'ready' && !input.endpointPath, expires: Date.now() + waitLimit };
     } finally { state.locked = false; }
     this.schedule(agent, state);
     return this.view(state);
@@ -201,7 +204,8 @@ class UnrealProjects extends TypertRemoteService {
     void (async () => {
       if (Date.now() > intent.expires) {
         intent.status = 'failed';
-        intent.error = 'Unreal MCP did not become ready. If Unreal is still starting, wait for its window and select the project again.';
+        const detail = intent.error ? ` Last check: ${intent.error}` : '';
+        intent.error = 'Unreal MCP did not become ready. Check the editor and MCP endpoint before retrying.' + detail;
         return;
       }
       const signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(24_000)]);
@@ -220,16 +224,17 @@ class UnrealProjects extends TypertRemoteService {
           if (verified.status === 'identity_mismatch') break;
           continue;
         }
-        const client = new UnrealMcp(port);
-        const attempt = AbortSignal.any([signal, AbortSignal.timeout(1800)]);
+        const client = new UnrealMcp(port, intent.endpointPath);
+        const attempt = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
         try {
-          await client.connect(attempt);
+          await client.connect(attempt, { ...intent, supportedEngine: verified.project?.supportedEngine === true });
           if (state.pending !== intent || this.ctx.agents.get(agent.id) !== agent || this.ctx.agentPresets.presetForSession(agent.session) !== 'unreal') {
             await client.close(attempt).catch(() => {});
             return;
           }
           state.client = client;
-          state.binding = { path: intent.path, pid: intent.pid, name: intent.name, port };
+          state.binding = { path: intent.path, pid: intent.pid, name: intent.name, port,
+            ...(intent.endpointPath ? { endpointPath: intent.endpointPath } : {}) };
           state.checkedAt = Date.now();
           state.pending = null;
           return;
@@ -239,6 +244,7 @@ class UnrealProjects extends TypertRemoteService {
           void client.close(attempt).catch(() => {});
         }
       }
+      if (invalid && state.pending === intent && diagnostic) intent.error = diagnostic;
       if (invalid && intent.canSuggestManual && state.pending === intent) {
         // A listener owned by UE can still be Remote Control or another plugin.
         const prepared = await worker({ action: 'prepare', path: intent.path, pid: intent.pid, skipPorts: intent.candidates }, signal);
@@ -267,9 +273,18 @@ class UnrealProjects extends TypertRemoteService {
     });
   }
 
-  visible(agent) { return !!agent && !!this.state.get(agent)?.binding; }
+  visible(agent, { tool, capability } = {}) {
+    const state = agent && this.state.get(agent);
+    return !!state?.binding && (!tool || state.client.hasTool(tool)) &&
+      (!capability || !!state.client.capabilities[capability]);
+  }
 
-  async callTool(agent, method, args, signal) {
+  callTool(agent, name, args, signal) {
+    // Existing conversations can retain the previous preset revision across reloads.
+    return this.useClient(agent, signal, (client, activeSignal) => client.callTool(name, args, activeSignal));
+  }
+
+  async useClient(agent, signal, operation) {
     const state = agent && this.state.get(agent);
     const target = state?.binding;
     const client = state?.client;
@@ -281,7 +296,7 @@ class UnrealProjects extends TypertRemoteService {
       this.lost(agent, state, target, verified);
       throw new Error(verified.error);
     }
-    try { return await client.request('tools/call', { name: method, arguments: args }, signal); }
+    try { return await operation(client, signal); }
     catch (error) {
       // Never replay an edit after a failure: it may already have run in Unreal.
       if (state.binding === target && /returned HTTP (400|404)\b/.test(message(error))) {

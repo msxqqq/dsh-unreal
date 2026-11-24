@@ -25,7 +25,8 @@
     "project-paths.js",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "README.en.md"
   ],
   "dsh": {
     "bundle": {

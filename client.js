@@ -11,6 +11,7 @@ window.__ModuleLoader__.load({
         toolbarVisible: 'Unreal Projects · {name}',
         working: 'Working…', checking: 'Checking connection…', toolbarChecking: 'Checking…', refresh: 'Refresh', close: 'Close',
         running: 'Running editors', noneRunning: 'No running Unreal editors with a project were found.',
+        endpointOptions: 'MCP connection options', endpointPath: 'MCP path for running editors',
         loading: 'Looking for Unreal Editor instances and installations…',
         connect: 'Connect', connectTo: 'Connect to {name} (PID {pid})', disconnect: 'Disconnect',
         pid: 'PID {pid}', port: 'Port {port}', ports: 'Ports: {ports}',
@@ -42,6 +43,7 @@ window.__ModuleLoader__.load({
         toolbarVisible: 'Unreal 工程 · {name}',
         working: '正在处理…', checking: '正在检查连接…', toolbarChecking: '确认中…', refresh: '刷新', close: '关闭',
         running: '正在运行的编辑器', noneRunning: '没有找到已打开工程的 Unreal 编辑器。',
+        endpointOptions: 'MCP 连接选项', endpointPath: '运行中编辑器的 MCP 路径',
         loading: '正在查找 Unreal 编辑器和引擎安装…',
         connect: '连接', connectTo: '连接到 {name}（PID {pid}）', disconnect: '断开连接',
         pid: '进程 ID：{pid}', port: '端口：{port}', ports: '端口：{ports}',
@@ -274,6 +276,7 @@ window.__ModuleLoader__.load({
       const titleId = useId();
       const [dialogOpen, setDialogOpen] = useState(false);
       const [path, setPath] = useState('');
+      const [endpointPath, setEndpointPath] = useState('');
       const [directoryOverride, setDirectoryOverride] = useState(null);
       const [browsedDefault, setBrowsedDefault] = useState(null);
       const [nameOverride, setNameOverride] = useState(null);
@@ -409,7 +412,8 @@ window.__ModuleLoader__.load({
               h('strong', null, t(state)),
               currentProject && h('p', null, projectName(currentProject)),
               currentProject?.path && meta(currentProject.path),
-              currentMeta && meta(currentMeta)),
+              currentMeta && meta(currentMeta),
+              currentProject?.endpointPath && meta(`${t('endpointPath')}: ${currentProject.endpointPath}`)),
             (binding || pending) && h('button', { type: 'button', disabled: busy,
               onClick: () => { setInvalid(''); void run('disconnect'); } }, t(binding ? 'disconnect' : 'cancelConnection'))),
           pendingKey === 'manual_start_required' && h('div', null,
@@ -422,6 +426,9 @@ window.__ModuleLoader__.load({
             t(browseProblem ? 'browseFailed' : unavailable ? 'unavailableHelp' : 'actionFailed'), detail ? ` ${detail}` : ''),
           !problem && detail && h('p', { className: 'dsh-unreal-problem', role: 'alert' }, detail),
           h('section', null, h('h3', null, t('running')),
+            projects.length > 0 && h('details', null, h('summary', null, t('endpointOptions')),
+              h('label', null, t('endpointPath'), h('input', { value: endpointPath, placeholder: '/mcp', maxLength: 256,
+                disabled: editingDisabled, spellCheck: false, autoComplete: 'off', onChange: event => setEndpointPath(event.target.value) }))),
             busy && operation === 'discover' ? h('p', { role: 'status', className: 'dsh-unreal-meta' }, t('loading')) : null,
             projects.length ? h('ul', null, projects.map((project) => {
               const connected = binding?.pid === project.pid && binding?.path === project.path;
@@ -431,7 +438,8 @@ window.__ModuleLoader__.load({
                   meta(project.path), meta(projectMeta(project, ports.length ? t('ports', { ports: ports.join(', ') }) : ''))),
                 h('button', { type: 'button', disabled: busy || connected || switching || Boolean(binding) || unavailable,
                   'aria-label': connected ? undefined : t('connectTo', { name: projectName(project), pid: project.pid }),
-                  onClick: () => { setInvalid(''); void run('connect', { path: project.path, pid: project.pid }); } },
+                  onClick: () => { setInvalid(''); void run('connect', { path: project.path, pid: project.pid,
+                     ...(endpointPath.trim() ? { endpointPath: endpointPath.trim() } : {}) }); } },
                 t(connected ? 'connected' : 'connect')));
             })) : discovery && !busy ? meta(t('noneRunning')) : null),
           discovery && !engines.length && meta(t('noEngines')),

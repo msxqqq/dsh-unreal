@@ -63,9 +63,7 @@ function Get-Engines {
             if (-not (Test-Path -LiteralPath $exe -PathType Leaf) -or -not (Has-Mcp $exe)) { continue }
             $build = ReadJson (Join-Path $root 'Engine\Build\Build.version')
             $version = [version]::new([int]$build.MajorVersion, [int]$build.MinorVersion, [int]$build.PatchVersion)
-            # The agent bridge uses the UE 5.8 Tool Search contract. UE 5.9
-            # renamed describe_toolset and changed the discovery API.
-            if ($version.Major -ne 5 -or $version.Minor -ne 8) { continue }
+            if ($version.Major -ne 5 -or $version.Minor -notin @(8,9)) { continue }
             $mcp = ReadJson (Mcp-DescriptorPath $exe)
             $toolset = Join-Path $root 'Engine\Plugins\Experimental\Toolsets\EditorToolset'
             $editorToolset = (Test-Path -LiteralPath (Join-Path $toolset 'EditorToolset.uplugin') -PathType Leaf) -and
@@ -80,6 +78,15 @@ function Mcp-DescriptorPath([string]$exe) {
     $bin = [IO.Path]::GetDirectoryName($exe)
     $engine = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($bin))
     return (Join-Path $engine 'Plugins\Experimental\ModelContextProtocol\ModelContextProtocol.uplugin')
+}
+
+function Test-SupportedEngine([string]$exe) {
+    if (-not $exe -or -not (Has-Mcp $exe)) { return $false }
+    try {
+        $engineRoot = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($exe)))
+        $build = ReadJson (Join-Path $engineRoot 'Build\Build.version')
+        return $build.MajorVersion -eq 5 -and $build.MinorVersion -in @(8,9)
+    } catch { return $false }
 }
 
 function Has-Mcp([string]$exe) {
@@ -234,7 +241,8 @@ function To-Project($editor, $listeners) {
         ForEach-Object { [int]$_.LocalPort } | Sort-Object -Unique)
     $preferred = [int](Field $editor 'preferredPort' 0)
     $ports = @((@($preferred,8000) + $local) | Where-Object { $local -contains $_ } | Select-Object -Unique)
-    return [ordered]@{ path = $editor.path; pid = $editor.pid; name = [IO.Path]::GetFileNameWithoutExtension($editor.path); ports = $ports }
+    return [ordered]@{ path = $editor.path; pid = $editor.pid; name = [IO.Path]::GetFileNameWithoutExtension($editor.path);
+        ports = $ports; supportedEngine = (Test-SupportedEngine (Field $editor 'exe' '')) }
 }
 
 function Fail([string]$status, [string]$message, $project = $null, $port = $null) {
@@ -310,6 +318,13 @@ function Write-NewProject([string]$path, $engine) {
         $bytes = [Text.Encoding]::UTF8.GetBytes(($descriptor | ConvertTo-Json -Depth 4))
         $stream.Write($bytes, 0, $bytes.Length)
     } finally { $stream.Dispose() }
+}
+
+function Get-EditorArguments([string]$path, [int]$port, [int]$minor) {
+    $module = if ($minor -ge 9) { 'ModelContextProtocol' } else { 'ModelContextProtocolEngine' }
+    return '"' + $path + '" -ModelContextProtocolStartServer -ModelContextProtocolPort=' + $port +
+        ' -ini:Engine:[HTTPServer.Listeners]:DefaultBindAddress=127.0.0.1,[HTTPServer.Listeners]:DefaultReuseAddressAndPort=False' +
+        " -ini:EditorPerProjectUserSettings:[/Script/$module.ModelContextProtocolSettings]:ServerUrlPath=/mcp"
 }
 
 function Invoke-Request($request) {
@@ -395,6 +410,7 @@ function Invoke-Request($request) {
     foreach ($userRoot in @([Environment]::GetFolderPath('LocalApplicationData'), [Environment]::GetFolderPath('MyDocuments'))) {
         if ($userRoot) { $configRoots += Join-Path $userRoot 'Unreal Engine\Engine\Config' }
     }
+    if ($env:ProgramData) { $configRoots += Join-Path $env:ProgramData 'Epic\Unreal Engine\Engine\Config' }
     foreach ($config in $configRoots) {
         if (Has-ListenerOverrides $config) {
             return Fail 'manual_launch_required' 'A local HTTP listener override can supersede the loopback launch option. No editor was launched; review the configuration before opening the project.'
@@ -403,9 +419,7 @@ function Invoke-Request($request) {
     $port = Free-Port $listeners
     Initialize-Win32
     if ($create) { Write-NewProject $path $engine }
-    $arguments = '"' + $path + '" -ModelContextProtocolStartServer -ModelContextProtocolPort=' + $port +
-        ' -ini:Engine:[HTTPServer.Listeners]:DefaultBindAddress=127.0.0.1,[HTTPServer.Listeners]:DefaultReuseAddressAndPort=False' +
-        ' -ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]:ServerUrlPath=/mcp'
+    $arguments = Get-EditorArguments $path $port $engine.version.Minor
     try {
         $editorPid = [DshUnreal.Win32]::StartEditor($engine.exe, $arguments, [IO.Path]::GetDirectoryName($engine.exe), [string[]]@(Get-EditorEnvironment))
     } catch {
