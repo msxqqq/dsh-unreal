@@ -2,6 +2,7 @@
   "name": "@local/dsh-unreal-mcp-preset",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": { "test": "node --test" },
   "description": "Select, launch, and connect Unreal Editor projects from an Unreal-mode conversation on Windows.",
