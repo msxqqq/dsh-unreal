@@ -27,3 +27,9 @@ Alternatively, download the `.tgz` package from the [GitHub Release](https://git
 2. DSH attempts to start MCP when it launches Unreal Editor. If an already-running editor has not started MCP, run the displayed `ModelContextProtocol.StartServer <port>` command in Unreal’s **Output Log** command box and wait for DSH to connect.
 
 The button shows the project name once connected. Each conversation has its own connection. Disconnecting does not close Unreal Editor.
+
+### Screenshots
+
+![Unreal mode and the project button](docs/images/unreal-mode.png)
+
+![Unreal project picker](docs/images/unreal-project-picker.png)
