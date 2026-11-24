@@ -27,3 +27,9 @@ https://github.com/msxqqq/dsh-unreal/releases/download/v0.1.0/dsh-unreal-0.1.0.t
 2. 由 DSH 打开的编辑器会尝试自动启动 MCP。已打开的编辑器若未启动 MCP，请在 Unreal 的 **Output Log** 命令栏运行界面提示的 `ModelContextProtocol.StartServer <端口>`，然后等待 DSH 自动连接。
 
 连接成功后，按钮会显示工程名。连接按会话隔离；断开连接不会关闭编辑器。
+
+### 界面截图
+
+![Unreal 模式和工程入口](docs/images/unreal-mode.png)
+
+![Unreal 工程选择窗口](docs/images/unreal-project-picker.png)
