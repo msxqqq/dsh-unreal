@@ -27,7 +27,9 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "docs/images/unreal-mode.png",
+    "docs/images/unreal-project-picker.png"
   ],
   "dsh": {
     "bundle": {
