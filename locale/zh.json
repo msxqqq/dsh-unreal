@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Unreal MCP",
+    "description": "在 Windows 的 Unreal 模式中选择已打开的工程，或新建、打开工程并连接编辑器内置 MCP。每个会话只操作它选定的 Unreal 编辑器。"
+  }
+}

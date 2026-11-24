@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Unreal MCP",
+    "description": "Select a running Unreal project or launch an existing or new project with built-in MCP on Windows. Each conversation uses only its selected editor."
+  }
+}
